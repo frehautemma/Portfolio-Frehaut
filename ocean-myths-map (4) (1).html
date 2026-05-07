@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ce que cache l'Océan</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Georgia', serif;
+      background: #0a1628;A
+      color: #e8d5a3;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════
+       SPLASH SCREEN
+    ══════════════════════════════ */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, #0d2240 0%, #050f23 60%, #020810 100%);
+      transition: opacity 0.9s ease, visibility 0.9s ease;
+    }
+    #splash.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* Vagues animées en fond du splash */
+    #splash::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 40% at 50% 110%, rgba(20,80,160,0.35) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 30% at 20% 90%, rgba(10,50,120,0.2) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 30% at 80% 95%, rgba(10,50,120,0.2) 0%, transparent 60%);
+      animation: wavePulse 4s ease-in-out infinite alternate;
+    }
+    @keyframes wavePulse {
+      from { opacity: 0.6; transform: scaleY(1); }
+      to   { opacity: 1;   transform: scaleY(1.08); }
+    }
+
+    /* Particules flottantes */
+    .particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(140, 210, 255, 0.22);
+  box-shadow: 0 0 12px rgba(140, 210, 255, 0.2);
+  animation: float linear infinite;
+}
+    @keyframes float {
+      0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 0.6; }
+      100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+    }
+
+    .splash-emoji {
+      font-size: 4rem;
+      margin-bottom: 24px;
+      animation: bob 3s ease-in-out infinite;
+      position: relative;
+      z-index: 1;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-12px); }
+    }
+
+    .splash-title {
+      font-size: clamp(2rem, 5vw, 3.8rem);
+      letter-spacing: 0.08em;
+      color: #e8d5a3;
+      text-align: center;
+      text-shadow:
+        0 0 30px rgba(100,180,255,0.6),
+        0 0 60px rgba(50,120,200,0.3);
+      line-height: 1.15;
+      position: relative;
+      z-index: 1;
+      margin-bottom: 16px;
+    }
+
+    .splash-sub {
+      font-size: clamp(0.8rem, 1.5vw, 1rem);
+      color: #7ab0d0;
+      letter-spacing: 0.22em;
+      text-align: center;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+      margin-bottom: 56px;
+      max-width: 500px;
+      line-height: 1.7;
+    }
+
+    .splash-btn {
+      position: relative;
+      z-index: 1;
+      background: transparent;
+      border: 1.5px solid rgba(120,180,230,0.6);
+      color: #c8dff0;
+      font-family: 'Georgia', serif;
+      font-size: 0.9rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      padding: 16px 40px;
+      border-radius: 40px;
+      cursor: pointer;
+      transition: all 0.35s ease;
+      box-shadow:
+        0 0 20px rgba(80,150,220,0.2),
+        inset 0 0 20px rgba(80,150,220,0.05);
+    }
+    .splash-btn:hover {
+      background: rgba(60,120,200,0.25);
+      border-color: rgba(160,210,255,0.9);
+      color: #e8f4ff;
+      box-shadow:
+        0 0 40px rgba(80,150,220,0.5),
+        inset 0 0 30px rgba(80,150,220,0.15);
+      transform: translateY(-2px);
+    }
+    .splash-btn::after {
+      content: ' ↓';
+      opacity: 0.7;
+    }
+
+    .splash-deco {
+      position: absolute;
+      bottom: 32px;
+      font-size: 0.6rem;
+      letter-spacing: 0.3em;
+      color: rgba(100,150,180,0.35);
+      text-transform: uppercase;
+      z-index: 1;
+    }
+
+    /* Ligne décorative */
+    .splash-line {
+      width: 60px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(120,180,230,0.5), transparent);
+      margin: 0 auto 40px;
+      position: relative;
+      z-index: 1;
+    }
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+    /* ══════════════════════════════
+       CARTE
+    ══════════════════════════════ */
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: linear-gradient(180deg, rgba(5,15,35,0.97) 0%, rgba(5,15,35,0.0) 100%);
+      padding: 18px 32px 40px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.8s ease 0.5s;
+    }
+    #header.visible { opacity: 1; }
+    #header h1 {
+      font-size: 1.6rem;
+      letter-spacing: 0.12em;
+      color: #e8d5a3;
+      text-shadow: 0 0 18px rgba(100,180,255,0.5);
+    }
+    #header p {
+      font-size: 0.78rem;
+      color: #8ab4d4;
+      letter-spacing: 0.18em;
+      margin-top: 4px;
+    }
+
+    #filters {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: rgba(5,15,35,0.82);
+      border: 1px solid rgba(100,160,220,0.25);
+      border-radius: 40px;
+      padding: 10px 18px;
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transition: opacity 0.8s ease 0.7s;
+    }
+    #filters.visible { opacity: 1; }
+
+    .filter-btn {
+      background: transparent;
+      border: 1px solid rgba(140,190,230,0.35);
+      color: #b8d4e8;
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.25s;
+      font-family: 'Georgia', serif;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: rgba(80,140,200,0.35);
+      border-color: #7ab8e0;
+      color: #e8f4ff;
+    }
+
+    #counter {
+      position: fixed;
+      top: 18px;
+      right: 28px;
+      z-index: 1000;
+      text-align: right;
+      opacity: 0;
+      transition: opacity 0.8s ease 0.6s;
+    }
+    #counter.visible { opacity: 1; }
+    #counter .num {
+      font-size: 2.4rem;
+      color: #7ab8e0;
+      line-height: 1;
+      text-shadow: 0 0 20px rgba(100,180,255,0.6);
+    }
+    #counter .label {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: #5a8aaa;
+      text-transform: uppercase;
+    }
+
+    #legend {
+      position: fixed;
+      top: 90px;
+      left: 28px;
+      z-index: 1000;
+      background: rgba(5,15,35,0.82);
+      border: 1px solid rgba(100,160,220,0.2);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(8px);
+      font-size: 0.72rem;
+      line-height: 2;
+      color: #8ab4d4;
+      opacity: 0;
+      transition: opacity 0.8s ease 0.8s;
+    }
+    #legend.visible { opacity: 1; }
+    #legend .leg-item { display: flex; align-items: center; gap: 8px; }
+    #legend .dot {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px currentColor;
+    }
+
+.legend-clickable {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-clickable:hover {
+  background: rgba(122, 184, 224, 0.15);
+}
+
+.legend-clickable.active {
+  background: rgba(122, 184, 224, 0.25);
+  box-shadow: inset 0 0 10px rgba(100, 180, 255, 0.1);
+}
+
+.legend-clickable.active span {
+  color: #fff;
+  font-weight: bold;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+    .leaflet-popup-content-wrapper {
+      background: rgba(5,18,42,0.96) !important;
+      border: 1px solid rgba(100,160,220,0.4) !important;
+      border-radius: 12px !important;
+      color: #e8d5a3 !important;
+      box-shadow: 0 0 30px rgba(50,120,200,0.4) !important;
+      backdrop-filter: blur(10px);
+      max-width: 280px;
+    }
+    .leaflet-popup-tip { background: rgba(5,18,42,0.96) !important; }
+    .leaflet-popup-content { margin: 14px 18px !important; }
+    .popup-cat {
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .popup-title {
+      font-size: 1.05rem;
+      font-weight: bold;
+      color: #e8d5a3;
+      margin-bottom: 8px;
+    }
+    .popup-desc {
+      font-size: 0.78rem;
+      color: #9ab8cc;
+      line-height: 1.55;
+    }
+    .popup-emoji { font-size: 1.6rem; margin-bottom: 6px; display: block; }
+
+    #quote {
+      position: fixed;
+      bottom: 90px;
+      right: 28px;
+      z-index: 1000;
+      font-style: italic;
+      font-size: 0.65rem;
+      color: rgba(100,150,180,0.5);
+      letter-spacing: 0.12em;
+      text-align: right;
+      opacity: 0;
+      transition: opacity 0.8s ease 0.9s;
+    }
+    #quote.visible { opacity: 1; }
+
+    .leaflet-control-attribution {
+      background: rgba(5,15,35,0.7) !important;
+      color: #4a6a8a !important;
+      font-size: 0.6rem !important;
+    }
+    .leaflet-control-attribution a { color: #5a8aaa !important; }
+
+    .leaflet-control-zoom a {
+      background: rgba(5,15,35,0.85) !important;
+      color: #7ab8e0 !important;
+      border-color: rgba(100,160,220,0.3) !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: rgba(30,60,100,0.9) !important;
+    }
+
+#infoPanel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 420px;
+  max-height: 78vh;
+  overflow-y: auto;
+  background: rgba(5,18,42,0.95);
+  border: 1px solid rgba(100,160,220,0.4);
+  border-radius: 14px;
+  padding: 20px 22px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(50,120,200,0.4);
+  z-index: 2000;
+  display: none;
+}
+
+#infoPanel.visible {
+  display: block;
+}
+
+#imagePanel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 500px;
+  background: rgba(5,18,42,0.95);
+  border: 1px solid rgba(100,160,220,0.4);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(50,120,200,0.4);
+  z-index: 2000;
+  display: none;
+  overflow: hidden;
+}
+
+#imagePanel.visible {
+  display: block;
+}
+
+#mythImage {
+  width: 100%;
+  height: 500px;
+  object-fit: cover; 
+  display: block;
+  border: none;      
+  outline: none;
+}
+
+#imageClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(5,18,42,0.75);
+  color: #e8d5a3;
+  cursor: pointer;
+  z-index: 10;
+  font-size: 0.85rem;
+}
+
+#imageClose:hover {
+  background: rgba(80,140,200,0.45);
+}
+
+
+#infoImg {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 14px 14px 0 0;
+  display: block;
+  border-bottom: 1px solid rgba(100,160,220,0.3);
+}
+
+#infoImg.hidden {
+  display: none;
+}
+
+
+#infoCat {
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+#infoTitle {
+  font-size: 1.35rem;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #e8d5a3;
+  line-height: 1.3;
+}
+
+#infoDesc {
+  font-size: 0.95rem;
+  color: #9ab8cc;
+  line-height: 1.7;
+}
+
+
+
+/* ── Bouton fermer ── */
+#infoClose {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: rgba(5,18,42,0.7);
+  border: 1px solid rgba(100,160,220,0.4);
+  color: #7ab8e0;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+#infoClose:hover {
+  background: rgba(80,140,200,0.4);
+  color: #fff;
+}
+  </style>
+</head>
+<body>
+
+<!-- ══ SPLASH SCREEN ══ -->
+<div id="infoPanel">
+  <button id="infoClose">✕</button>
+  <div id="infoContent">
+    <span id="infoEmoji"></span>
+    <div id="infoCat"></div>
+    <div id="infoTitle"></div>
+    <div id="infoDesc"></div>
+  </div>
+</div>
+
+<div id="imagePanel">
+  <button id="imageClose">✕</button>
+  <img id="mythImage" src="" alt="Illustration du mythe">
+</div>
+
+<div id="splash">
+
+  <!-- Particules flottantes générées en JS -->
+
+  <div class="splash-emoji"></div>
+
+  <h1 class="splash-title">Ce que cache<br>l'Océan</h1>
+
+  <div class="splash-line"></div>
+
+  <p class="splash-sub">Quand mythes et légendes racontent<br>l'inconnu des profondeurs</p>
+
+  <button class="splash-btn" id="enterBtn">Plonger dans les abysses</button>
+
+  <div class="splash-deco">25 légendes cartographiées · Mythes & Profondeurs</div>
+</div>
+
+<!-- ══ CARTE ══ -->
+<div id="map"></div>
+
+
+<div id="header">
+  <h1> Ce que cache l'Océan</h1>
+  <p>Mythes &amp; Légendes des Profondeurs • Cliquez sur un symbole pour découvrir</p>
+</div>
+
+<div id="counter">
+  <div class="num" id="visibleCount">25</div>
+  <div class="label">légendes<br>cartographiées</div>
+</div>
+
+<div id="legend">
+  <h3>Classification</h3>
+  <div class="legend-item legend-clickable active" onclick="filterCategory('all', this)">
+    <div class="legend-dot" style="background: #e8d5a3"></div>
+    <span>Tous les récits</span>
+  </div>
+  <div class="legend-item legend-clickable" onclick="filterCategory('lieu', this)">
+    <div class="legend-dot" style="background: #5c9ee0"></div>
+    <span>Lieux Engloutis</span>
+  </div>
+  <div class="legend-item legend-clickable" onclick="filterCategory('monstre', this)">
+    <div class="legend-dot" style="background: #e05c5c"></div>
+    <span>Monstres & Créatures</span>
+  </div>
+  <div class="legend-item legend-clickable" onclick="filterCategory('fantome', this)">
+    <div class="legend-dot" style="background: #e0c45c"></div>
+    <span>Fantômes & Épaves</span>
+  </div>
+  <div class="legend-item legend-clickable" onclick="filterCategory('divinite', this)">
+    <div class="legend-dot" style="background: #9b5ce0"></div>
+    <span>Divinités Marines</span>
+  </div>
+</div>
+
+<div id="quote">« Hic svnt dracones » — Terra incognita — Abyssus abyssum invocat</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+
+const INITIAL_CENTER = [20, 0];
+const INITIAL_ZOOM   = 3;
+
+// ── Retour à la vue globale ──
+function resetMapView() {
+  map.flyTo(INITIAL_CENTER, INITIAL_ZOOM, {
+    animate: true,
+    duration: 0.5,
+    easeLinearity: 1
+  });
+}
+
+
+// ── Fermeture complète des deux panneaux + dézoom ──
+function closeAllPanels() {
+  document.getElementById('infoPanel').classList.remove('visible');
+  document.getElementById('imagePanel').classList.remove('visible');
+  resetMapView();
+}
+
+
+// ── PARTICULES SPLASH ──
+const splash = document.getElementById('splash');
+for (let i = 0; i < 40; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  const size = Math.random() * 10 + 3;
+  p.style.cssText = `
+    width:${size}px;
+    height:${size}px;
+    left:${Math.random() * 100}%;
+    animation-duration:${Math.random() * 10 + 6}s;
+    animation-delay:${Math.random() * 6}s;
+    opacity:${Math.random() * 0.5 + 0.2};
+  `;
+  splash.appendChild(p);
+}
+
+// ── BOUTON ENTRÉE ──
+document.getElementById('enterBtn').addEventListener('click', () => {
+  splash.classList.add('hidden');
+
+  setTimeout(() => {
+    document.getElementById('header').classList.add('visible');
+    document.getElementById('counter').classList.add('visible');
+    document.getElementById('legend').classList.add('visible');
+    document.getElementById('quote').classList.add('visible');
+    map.invalidateSize();
+  }, 100);
+});
+
+// ── INIT MAP ──
+const map = L.map('map', {
+  center: INITIAL_CENTER,
+  zoom:   INITIAL_ZOOM,
+  zoomControl: true,
+  attributionControl: true
+});
+
+// ══════════════════════════════════════════════════════
+// FOND DE CARTE : ESRI Ocean Base
+// ✅ Gratuit, sans clé API, océans bleus avec bathymétrie
+// ══════════════════════════════════════════════════════
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+  {
+    attribution: 'Tiles &copy; Esri &mdash; GEBCO, NOAA, National Geographic',
+    maxZoom: 13
+  }
+).addTo(map);
+
+// Overlay noms des océans et mers
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
+  {
+    attribution: '',
+    maxZoom: 13,
+    opacity: 0.7
+  }
+).addTo(map);
+
+// ── DONNÉES : 25 légendes ──
+const legends = [
+  { id:'1', name:'Atlantide', lat:34.0, lng:-25.0, cat:'lieu', img:'https://upload.wikimedia.org/wikipedia/commons/2/26/Atlantis_Monsu_Desiderio.jpg',
+    desc:'Île mythique décrite par Platon dans 2 de ses dialogues, l\'Atlantide aurait été enseveli par un cataclysme envoyé par Zeus pour punir l\'orgueil et l\'avidité de ses habitants.<br><br><i>“En l’espace d’un seul jour et d’un nuit terrible, tout ce que vous aviez de combattants rassemblés fut englouti dans la terre, et l’île d’Atlantide de même fut engloutie dans la mer et disparue”</i><br>Platon, Timée, 25d<br><br>Ce mythe, aux nombreux adeptes au fil du temps, interroge les conséquences de l\'orgueil humain, à la fois pour lui mais aussi pour la planète et sa nature. Il peut être relu comme une mise en garde face au changement climatique.' },
+ { id:'2', name:'Antre de Davy Jones', lat:15.0, lng:-65.0, cat:'fantome', img:'https://upload.wikimedia.org/wikipedia/commons/d/d6/Davy_Jones_by_George_Cruikshank.png',
+desc:'Aux origines inconnues, Davy Jones est un esprit de la mer associé à la mort en mer. Son “antre” (ou locker) est une métaphore des fonds marins, où reposent les marins disparus.<br><br><i>“Ce même Davy Jones, selon la mythologie des marins, est le démon qui règne sur tous les esprits maléfiques des profondeurs, [...] avertissant le misérable dévoué de la mort et du malheur”</i><br>T. Smollett, The Adventures of Peregrine Pickle, 1751<br><br>De nos jours, ce mythe a été renforcé par son apparition dans la saga Pirates des Caraïbes.' },
+
+{ id:'3', name:'Moby Dick', lat:-35.0, lng:-40.0, cat:'monstre', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/FMIB_44681_Killing_a_Sperm_Whale_with_the_Lance.jpeg/960px-FMIB_44681_Killing_a_Sperm_Whale_with_the_Lance.jpeg',
+desc:'Mocha Dick serait un cachalot inhabituellement blanc insaisissable, ayant survécu à de nombreuses attaques de baleiniers. Abordé dans un compte rendu de l’explorateur J.N. Reynolds, ce cachalot est à l’origine du roman Moby Dick, d’Herman Melville.<br><br><i>“Mais il ne pouvait être question de pitié ici. Malgré sa vieillesse, son unique nageoire et ses yeux aveugles, la baleine était vouée à la mort par assassinat, afin de donner de la clarté aux joyeux mariages et autres festins de l’homme”</i><br>H. Melville, Moby Dick, 1851<br><br>Ce mythe met en lumière les excès de la surpêche, et rappelle l’importance de préserver la biodiversité marine face aux activités humaines.' },
+
+{ id:'4', name:'Le Kraken', lat:65.0, lng:5.0, cat:'monstre', img:'https://curious-archive.b-cdn.net/wp-content/uploads/the-kraken-1024x689.jpg',
+desc:'Issu des légendes scandinaves, le Kraken est un monstre marin gigantesque capable de dévorer des navires entiers.<br><br><i>“Une bête d’un mille et demi de long qui, si elle s’accroche au plus grand navire de guerre, le fait couler jusqu’au fond”</i><br>Erik Ludvigsen, Histoire naturelle de la Norvège, 1752<br><br>Ressemblant à une immense pieuvre, ce monstre marin semble se référer aux calmars géants, animaux bien réels mais encore largement méconnus. Entre mythe et réalité, le Kraken continue de nourrir l’imaginaire collectif, et rappelle que les océans restent des territoires mystérieux et inexplorés.' },
+
+{ id:'5', name:'Sirènes de l\'Odyssée', lat:38.0, lng:15.0, cat:'monstre', img:'https://upload.wikimedia.org/wikipedia/commons/6/6a/Odysseus-siren_Parthenope%2C_the_mythological_founder_of_Naples.jpg',
+desc:'Créatures mythologiques grecques, les sirènes ont une apparence mi-femmes, mi-oiseaux. Elles attirent les marins avec leur chant envoûtant avant de les conduire à leur perte, symbole du danger de la mer.<br><br><i>“Il vous faudra d’abord passer près des Sirènes. Elles charment tous les mortels qui les approchent”</i><br>Homère, Odyssée<br><br>Dans Les Métamorphoses d’Ovide, elles sont décrites comme d’anciennes compagnes de Perséphone, transformées en sirènes pour partir à sa recherche après son enlèvement.' },
+
+{ id:'6', name:'Les Dents de la Mer', lat:41.0, lng:-70.0, cat:'monstre', img:'https://lejournal.cnrs.fr/sites/default/files/styles/asset_image_full/public/assets/images/naturepl_00659386_72dpi.jpg?itok=aEniNp4Z',
+desc:'Popularisé par le roman de Peter Benchley (1974), puis par le film Les dents de la mer (1975) de Spielberg, le requin éponyme se présente comme un mangeur d’hommes sévissant sur l’île fictive d’Amity.<br><br><i>“Eh bien, ce n’est pas un accident de bateau ! Ce n’était pas un récit corallien, et ce n’était pas Jack l’Éventreur ! C’était un requin.”</i><br>Hooper, Les dents de la mer, 1975<br><br>Ce grand requin blanc tueur a contribué à construire l’image du requin comme animal terrifiant, alors que la réalité est toute différente : ce sont des espèces massivement menacées par la surpêche. Les requins tuent une dizaine d\'humains par an, mais les humains en tuent plus de 100 millions chaque année.' },
+
+{ id:'7', name:'Néréides', lat:39.0, lng:25.0, cat:'divinite', img:'https://revue-histoire.fr/wp-content/uploads/2025/05/leucothee-accueillie-parmi-les-nereides-par-sebastien-le-clerc-entre-1676-et-1763-a-paris-768x580.jpg',
+desc:'Originaires de la mythologie grecque antique, les Néréides sont des nymphes marines vivant dans la mer Égée. Filles de Nérée et de Doris, ces cinquante divinités aquatiques forment le cortège de Poséidon.<br><br><i>“Sur l’écume blanche qui frange le manteau glauque de la mer se groupent en bouquet étrange trois nymphes, fleurs du gouffre amer”</i><br>T. Gautier, Les Néréides, 1853<br><br>Souvent représentées chevauchant des dauphins ou des chevaux marins, elles symbolisent le mouvement de la mer et une vision poétique des relations entre humains et océan.' },
+
+{ id:'8', name:'Le Léviathan', lat:32.0, lng:35.0, cat:'monstre', img:'https://www.science-et-vie.com/wp-content/uploads/scienceetvie/2023/04/shutterstock_95719960-scaled.jpg',
+desc:'Le Léviathan est un monstre gigantesque, souvent décrit comme un dragon, un crocodile ou encore un serpent. Il incarne une force destructrice capable de bouleverser l’ordre du monde.<br><br><i>“La terre fut ébranlée et trembla, les fondements des montagnes frémirent”</i><br>Psaumes 18 : 8, Bible<br><br>Ce mythe peut être interprété comme une métaphore des grandes catastrophes naturelles et des bouleversements climatiques.' },
+
+{ id:'9', name:'La Licorne (Tintin)', lat:20.6, lng:-70.8, cat:'fantome', img:'https://cdn001.tintin.com/public/tintin/img/news/5959/licorne.png',
+desc:'La Licorne est un vaisseau à trois-mâts célèbre dans l’œuvre d’Hergé, ayant appartenu à l’ancêtre du capitaine Haddock.<br><br><i>“Ainsi périt La Licorne, le fier vaisseau commandé par François, Chevalier de Hadoque. Et de tous les flibustiers qui étaient à bord, pas un seul n’échappa à la mort”</i><br>Hergé, Le Secret de la Licorne<br><br>Ce mythe incarne le rêve d’exploration et le mystère des épaves cachées dans les profondeurs océaniques.' },
+
+{ id:'10', name:'Loch Ness', lat:57.3, lng:-4.4, cat:'monstre', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Loch_Ness_Monster_Surgeon%27s_photograph.jpg/250px-Loch_Ness_Monster_Surgeon%27s_photograph.jpg',
+desc:'Dans les Highlands d’Écosse, le Loch Ness est célèbre pour abriter une créature mystérieuse surnommée “Nessie”.<br><br>Malgré de nombreuses recherches scientifiques, notamment au sonar, aucune preuve n’a confirmé son existence.<br><br>Ce mythe illustre la fascination humaine pour l’inconnu, tout en attirant tourisme et curiosité.' },
+
+{ id:'11', name:'Hollandais Volant', lat:-34.0, lng:18.0, cat:'fantome', img:'https://static.wikia.nocookie.net/piratesdescaraibes/images/9/90/Hollandais_Volant_Infobox.jpg/revision/latest?cb=20170527205301&path-prefix=fr',
+desc:'Le Hollandais Volant est un vaisseau fantôme condamné à errer éternellement sans jamais pouvoir accoster.<br><br>Selon la légende, son capitaine aurait défié les dieux ou la nature, entraînant cette malédiction.<br><br>Il symbolise la peur de la mer et les dangers de la navigation.' },
+
+{ id:'12', name:'Trésor de Kidd', lat:-17.0, lng:49.8, cat:'fantome', img:'https://upload.wikimedia.org/wikipedia/commons/5/50/William_Kidd.jpg',
+desc:'William Kidd, pirate écossais exécuté en 1701, aurait caché un trésor dont l’emplacement reste inconnu.<br><br><i>“My name is Captain Kidd And God’s laws I did forbid”</i><br>Great Big Sea, Captain Kidd<br><br>En 2025, la découverte d’un lingot relance le mythe. Ces recherches soulèvent des enjeux environnementaux liés à l’exploration marine.' },
+
+{ id:'13', name:'Triangle des Bermudes', lat:25.0, lng:-70.0, cat:'fantome', img:'https://static.nationalgeographic.fr/files/styles/image_3200/public/ocean-5687462_1280.webp?w=1600&h=900',
+desc:'Le triangle des Bermudes est célèbre pour ses disparitions mystérieuses de navires et d’avions.<br><br><i>“Personne ne sort du Triangle des Bermudes, même pas pour des vacances.”</i><br>La Famille Addams<br><br>Aujourd’hui, les scientifiques expliquent ces phénomènes par des conditions météorologiques instables et des courants océaniques.' },
+
+{ id:'14', name:'Vaisseau de la Baie', lat:48.0, lng:-65.0, cat:'fantome', img:'https://jeanprovencher.com/wp-content/uploads/2013/07/vaisseaufantome.jpeg',
+desc:'Dans la baie des Chaleurs, un navire fantôme serait aperçu lors de conditions météorologiques similaires à une ancienne catastrophe.<br><br>Selon la légende, un navire s’échoua après un avertissement ignoré.<br><br>Depuis, des témoins affirment voir un vaisseau enflammé apparaître.' },
+
+{ id:'15', name:'Cantre\'r Gwaelod', lat:52.5, lng:-4.5, cat:'lieu', img:'https://rcahmw.gov.uk/wp-content/uploads/2025/10/6405017-1024x695.jpeg',
+desc:'Cantre’r Gwaelod est un royaume englouti du Pays de Galles.<br><br>Ce mythe pourrait provenir de la montée des eaux après la dernière glaciation.<br><br>Il fait écho aux enjeux contemporains liés à l’élévation du niveau de la mer.' },
+
+{ id:'16', name:'Kitej', lat:56.8, lng:45.1, cat:'lieu', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Kitezh.jpg/250px-Kitezh.jpg',
+desc:'Kitej est une cité légendaire russe qui se serait immergée pour échapper aux invasions mongoles.<br><br>Selon la légende, la ville fut engloutie après les prières de ses habitants.<br><br>Elle resterait visible uniquement pour les âmes pures.' },
+
+{ id:'17', name:'R\'lyeh', lat:-47.9, lng:-126.7, cat:'lieu', img:'https://static.wikia.nocookie.net/lovecraft/images/4/46/D7E143E6-B6A4-4C1A-9C58-83C18B28FEAA.jpeg/revision/latest/thumbnail/width/360/height/450?cb=20200718165027',
+desc:'R’lyeh est une cité engloutie fictive imaginée par Lovecraft.<br><br>Elle abriterait la créature cosmique Cthulhu, endormie dans les profondeurs.<br><br>Elle symbolise la peur de l’inconnu et des abysses.' },
+
+{ id:'18', name:'Ville d\'Ys', lat:48.1, lng:-4.4, cat:'lieu', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Auguste_Fran%C3%A7ois-Marie_Gorguet_-_poster_for_the_premi%C3%A8re_performance_of_%C3%89douard_Lalo%27s_Le_roi_d%27Ys_%281888%29.jpg/960px-Auguste_Fran%C3%A7ois-Marie_Gorguet_-_poster_for_the_premi%C3%A8re_performance_of_%C3%89douard_Lalo%27s_Le_roi_d%27Ys_%281888%29.jpg',
+desc:'La ville d’Ys est une légende bretonne racontant la submersion d’une cité magnifique.<br><br>La mer aurait englouti la ville après l’ouverture d’une porte lors d’une tempête.<br><br>Certains affirment entendre encore ses cloches sous l’eau.' },
+
+{ id:'19', name:'Libertalia', lat:-12.2, lng:49.3, cat:'lieu', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Couverture_Histoire_G%C3%A9n%C3%A9rale_Pirates_1728.png/500px-Couverture_Histoire_G%C3%A9n%C3%A9rale_Pirates_1728.png',
+desc:'Libertalia serait une république pirate fondée autour de 1700 à Madagascar.<br><br>Basée sur des idéaux d’égalité et de liberté, elle reste sans preuve historique.<br><br>Elle incarne une utopie politique maritime.' },
+
+{ id:'20', name:'Trou de Madame Coco', lat:16.5, lng:-61.5, cat:'fantome', img:'https://www.tropicalement-votre.com/dests/guadeloupe/trou-de-madame-coco-guadeloupe.jpg',
+desc:'Le trou de Madame Coco est une grotte mystérieuse en Guadeloupe.<br><br>Selon la légende, une sorcière y aurait été emportée par la mer après un pacte avec le diable.<br><br>Le lieu reste inaccessible et chargé de mystère.' },
+
+{ id:'21', name:'Ningyo', lat:35.0, lng:139.0, cat:'monstre', img:'https://www.nippon.com/fr/ncommon/contents/japan-topics/1816093/1816093.jpg',
+desc:'Dans le folklore japonais, les Ningyo sont des créatures mi-humaines mi-poissons.<br><br>Leur capture portait malheur et provoquait tempêtes et catastrophes.<br><br>Ils illustrent la crainte des océans dans la culture japonaise.' },
+
+{ id:'22', name:'Selkie', lat:60.3, lng:-1.2, cat:'monstre', img:'https://i0.wp.com/www.monde-fantasy.com/wp-content/uploads/2023/11/selkie-jamesbrowne.jpg?resize=672%2C1024&ssl=1',
+desc:'Les Selkies sont des créatures écossaises capables de se transformer de phoques en humains.<br><br>Privées de leur peau, elles sont contraintes de vivre sur terre.<br><br>Ce mythe évoque la nostalgie de l’océan et la perte de liberté.' },
+
+{ id:'23', name:'Ningen', lat:-65.0, lng:100.0, cat:'monstre', img:'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Monstruo_Ningen.jpg/250px-Monstruo_Ningen.jpg',
+desc:'Le Ningen est une créature humanoïde géante issue du folklore japonais contemporain.<br><br>Souvent confondu avec un iceberg ou un cétacé, il illustre la propagation moderne des mythes via Internet.' }
+];
+
+const catColors = {
+  monstre:  '#e05c5c',
+  lieu:     '#5c9ee0',
+  divinite: '#9b5ce0',
+  fantome:  '#e0c45c',
+  fiction:  '#5ce0a0',
+};
+const catLabels = {
+  monstre:  'Monstres & Créatures',
+  lieu:     'Lieux Engloutis',
+  divinite: 'Divinités Marines',
+  fantome:  'Fantômes & Épaves',
+  fiction:  'Fiction & Littérature',
+};
+
+// ── MARQUEURS ──
+const markers = [];
+
+function createIcon(legend) {
+  const color = catColors[legend.cat];
+
+  const html = `
+    <div style="
+      width:36px;
+      height:36px;
+      position: relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    ">
+
+      <!-- Pulse (arrière-plan) -->
+      <div style="
+        position:absolute;
+        width:36px;
+        height:36px;
+        border:2px solid ${color};
+        border-radius:50%;
+        animation: pulse 2.5s infinite;
+        opacity:0.6;
+      "></div>
+
+      <!-- Cercle fixe (important pour visibilité) -->
+      <div style="
+        position:absolute;
+        width:12px;
+        height:12px;
+        border:2px solid ${color};
+        border-radius:50%;
+        background: rgba(5,18,42,0.9);
+        box-shadow: 0 0 10px ${color};
+      "></div>
+
+      <!-- Point central (ultra visible) -->
+      <div style="
+        width:10px;
+        height:10px;
+        background:${color};
+        border-radius:50%;
+        box-shadow:
+          0 0 6px ${color},
+          0 0 10px ${color};
+      "></div>
+
+    </div>
+  `;
+
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+}
+
+legends.forEach(leg => {
+  const marker = L.marker([leg.lat, leg.lng], { icon: createIcon(leg) });
+  marker.legendData = leg;
+
+marker.on('click', () => {
+    map.flyTo([leg.lat, leg.lng], 7, {
+      animate: true,
+      duration: 2, 
+      easeLinearity: 0.25
+    });
+    showInfoPanel(leg);
+});
+  marker.addTo(map);
+  markers.push(marker);
+});
+
+// ── FILTRES ──
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const activeFilter = btn.dataset.cat;
+    let count = 0;
+    markers.forEach(m => {
+      const show = activeFilter === 'all' || m.legendData.cat === activeFilter;
+      if (show) { m.addTo(map); count++; }
+      else { map.removeLayer(m); }
+    });
+    document.getElementById('visibleCount').textContent = count;
+  });
+});
+
+function filterCategory(cat, element) {
+  // 1. Gérer l'apparence de la légende
+  document.querySelectorAll('.legend-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  element.classList.add('active');
+
+  // 2. Filtrer les marqueurs sur la carte
+  let count = 0;
+  markers.forEach(m => {
+    const show = (cat === 'all' || m.legendData.cat === cat);
+    if (show) {
+      m.addTo(map);
+      count++;
+    } else {
+      map.removeLayer(m);
+    }
+  });
+
+  // 3. Mettre à jour le compteur en haut à droite
+  document.getElementById('visibleCount').textContent = count;
+}
+
+function showInfoPanel(leg) {
+  // Fenêtre de gauche : texte
+  const panel = document.getElementById('infoPanel');
+  panel.classList.add('visible');
+
+  document.getElementById('infoEmoji').textContent = leg.emoji || '';
+
+  const catEl = document.getElementById('infoCat');
+  catEl.textContent = catLabels[leg.cat] || '';
+  catEl.style.color = catColors[leg.cat] || '#e8d5a3';
+
+  document.getElementById('infoTitle').textContent = leg.name || '';
+  document.getElementById('infoDesc').innerHTML = leg.desc || '';
+
+  // Fenêtre de droite : image
+  const imagePanel = document.getElementById('imagePanel');
+  const mythImage = document.getElementById('mythImage');
+
+  if (leg.img) {
+    mythImage.src = leg.img;
+    mythImage.alt = `Illustration de ${leg.name}`;
+    imagePanel.classList.add('visible');
+  } else {
+    imagePanel.classList.remove('visible');
+  }
+}
+
+document.getElementById('infoClose').addEventListener('click', closeAllPanels);
+document.getElementById('imageClose').addEventListener('click', closeAllPanels);
+
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
